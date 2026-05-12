@@ -10,7 +10,7 @@
 */
 
 import RouterBuilder from '@/eloquent/Router/router';
-import FileController from '@/app/Http/Controllers/File/FileController';
+import {FileController} from "@app/Http/Controllers/File/FileController";
 
 export const webRoutesBuilder = new RouterBuilder();
 const rb = webRoutesBuilder;
@@ -21,8 +21,8 @@ const rb = webRoutesBuilder;
 |--------------------------------------------------------------------------
 */
 rb.prefix('/public').group((g: RouterBuilder) => {
-    g.get('/files/:token', FileController.publicDownload);
-    g.get('/thumbnails/:token', FileController.publicThumbnail);
+    g.get('/files/:token', [FileController, 'publicDownload']);
+    g.get('/thumbnails/:token', [FileController,'publicThumbnail']);
 });
 
 /*
