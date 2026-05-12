@@ -2,7 +2,7 @@ import Role from '@/app/Models/User/Role';
 import { ModelAttributes } from '@/eloquent/types';
 import PermissionsRoles from '@/app/Models/User/PermissionsRoles';
 
-class RoleService {
+export class RoleService {
   async list() {
     return Role.with(['permissions']).all();
   }

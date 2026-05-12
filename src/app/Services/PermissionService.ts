@@ -1,7 +1,7 @@
 import Permission from '@/app/Models/User/Permission';
 import { ModelAttributes } from '@/eloquent/types';
 
-class PermissionService {
+export class PermissionService {
   async list() {
     return Permission.all();
   }
