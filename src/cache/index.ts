@@ -1,7 +1,8 @@
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
-import CacheModel from '@/app/Models/Cache/Cache';
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import CacheModel from "@/app/Models/Cache/Cache";
+import { CacheWatcher } from "@/eloquent/Telescope/Watchers/CacheWatcher";
 
 // Re-export rate limiter
 export {
@@ -10,8 +11,8 @@ export {
   RateLimitExceededException,
   defineRateLimiter,
   getNamedLimiter,
-} from './RateLimiter';
-export type { RateLimiterConfig, RateLimitInfo } from './RateLimiter';
+} from "./RateLimiter";
+export type { RateLimiterConfig, RateLimitInfo } from "./RateLimiter";
 
 export interface CacheDriver {
   init(): Promise<void>;
@@ -24,21 +25,21 @@ export interface CacheDriver {
 }
 
 // Encryption helpers (Laravel-like behavior)
-const APP_KEY = process.env.APP_KEY || '';
-const CIPHER = 'aes-256-cbc';
+const APP_KEY = process.env.APP_KEY || "";
+const CIPHER = "aes-256-cbc";
 let ENCRYPTION_ENABLED = false;
 let ENCRYPTION_KEY: Buffer | null = null;
 
 function deriveKeyFromAppKey(appKey: string): Buffer {
   if (!appKey) return Buffer.alloc(0);
-  if (appKey.startsWith('base64:')) {
+  if (appKey.startsWith("base64:")) {
     const b = appKey.slice(7);
-    return Buffer.from(b, 'base64');
+    return Buffer.from(b, "base64");
   }
-  const buf = Buffer.from(appKey, 'utf8');
+  const buf = Buffer.from(appKey, "utf8");
   if (buf.length === 32) return buf;
   // derive 32 bytes via sha256
-  return crypto.createHash('sha256').update(buf).digest();
+  return crypto.createHash("sha256").update(buf).digest();
 }
 
 if (APP_KEY) {
@@ -46,40 +47,40 @@ if (APP_KEY) {
     ENCRYPTION_KEY = deriveKeyFromAppKey(APP_KEY);
     if (ENCRYPTION_KEY.length !== 32) {
       console.warn(
-        'APP_KEY provided but did not yield 32 bytes; derived key length:',
+        "APP_KEY provided but did not yield 32 bytes; derived key length:",
         ENCRYPTION_KEY.length,
-        '— disabling encryption',
+        "— disabling encryption",
       );
       ENCRYPTION_ENABLED = false;
     } else {
       ENCRYPTION_ENABLED = true;
     }
   } catch (e) {
-    console.warn('Failed to initialize cache encryption, proceeding without encryption:', e);
+    console.warn("Failed to initialize cache encryption, proceeding without encryption:", e);
     ENCRYPTION_ENABLED = false;
   }
 } else {
   // not fatal — allow running without encryption but warn
   console.warn(
-    'No APP_KEY set; cache encryption is disabled. Set APP_KEY in your .env to enable encryption of cached values.',
+    "No APP_KEY set; cache encryption is disabled. Set APP_KEY in your .env to enable encryption of cached values.",
   );
 }
 
 function hmacFor(ivB64: string, valueB64: string) {
-  if (!ENCRYPTION_KEY) return '';
+  if (!ENCRYPTION_KEY) return "";
   return crypto
-    .createHmac('sha256', ENCRYPTION_KEY)
-    .update(ivB64 + '|' + valueB64)
-    .digest('hex');
+    .createHmac("sha256", ENCRYPTION_KEY)
+    .update(ivB64 + "|" + valueB64)
+    .digest("hex");
 }
 
 function encryptRaw(plain: string): string {
   if (!ENCRYPTION_ENABLED || !ENCRYPTION_KEY || ENCRYPTION_KEY.length !== 32) return plain;
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv(CIPHER, ENCRYPTION_KEY, iv);
-  const encrypted = Buffer.concat([cipher.update(Buffer.from(plain, 'utf8')), cipher.final()]);
-  const ivB = iv.toString('base64');
-  const valB = encrypted.toString('base64');
+  const encrypted = Buffer.concat([cipher.update(Buffer.from(plain, "utf8")), cipher.final()]);
+  const ivB = iv.toString("base64");
+  const valB = encrypted.toString("base64");
   const mac = hmacFor(ivB, valB);
   const payload = { iv: ivB, value: valB, mac };
   return JSON.stringify(payload);
@@ -96,19 +97,19 @@ function decryptRaw(payloadStr: string): string | null {
   }
   if (!payload || !payload.iv || !payload.value || !payload.mac) return null;
   const expected = hmacFor(payload.iv, payload.value);
-  if (!crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(payload.mac, 'hex'))) {
-    throw new Error('Cache decryption failed: invalid MAC');
+  if (!crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(payload.mac, "hex"))) {
+    throw new Error("Cache decryption failed: invalid MAC");
   }
-  const iv = Buffer.from(payload.iv, 'base64');
-  const enc = Buffer.from(payload.value, 'base64');
+  const iv = Buffer.from(payload.iv, "base64");
+  const enc = Buffer.from(payload.value, "base64");
   const decipher = crypto.createDecipheriv(CIPHER, ENCRYPTION_KEY as Buffer, iv);
   const decrypted = Buffer.concat([decipher.update(enc), decipher.final()]);
-  return decrypted.toString('utf8');
+  return decrypted.toString("utf8");
 }
 
 const CACHE_PREFIX = process.env.CACHE_PREFIX
-    ? String(process.env.CACHE_PREFIX)
-    : (process.env.APP_NAME || 'app');
+  ? String(process.env.CACHE_PREFIX)
+  : process.env.APP_NAME || "app";
 function prefixed(key: string) {
   if (!CACHE_PREFIX) return key;
   return `${CACHE_PREFIX}:${key}`;
@@ -116,15 +117,15 @@ function prefixed(key: string) {
 
 function stripPrefix(fullKey: string): string {
   if (!CACHE_PREFIX) return fullKey;
-  return fullKey.startsWith(CACHE_PREFIX + ':') ? fullKey.slice(CACHE_PREFIX.length + 1) : fullKey;
+  return fullKey.startsWith(CACHE_PREFIX + ":") ? fullKey.slice(CACHE_PREFIX.length + 1) : fullKey;
 }
 export function generateCacheKey(
   ...parts: Array<string | number | boolean | Date | null | undefined>
 ): string {
   const cleaned = parts
     .filter((p) => p !== undefined && p !== null)
-    .map((p) => (p instanceof Date ? p.toISOString() : String(p).trim().replace(/\s+/g, '_')));
-  return cleaned.join(':'); // unprefixed base key
+    .map((p) => (p instanceof Date ? p.toISOString() : String(p).trim().replace(/\s+/g, "_")));
+  return cleaned.join(":"); // unprefixed base key
 }
 
 class FileCache implements CacheDriver {
@@ -132,7 +133,7 @@ class FileCache implements CacheDriver {
   private initialized = false;
 
   constructor(baseDir?: string) {
-    this.dir = baseDir || path.resolve(__dirname, '../../tmp/cache');
+    this.dir = baseDir || path.resolve(__dirname, "../../tmp/cache");
   }
 
   async init() {
@@ -151,7 +152,7 @@ class FileCache implements CacheDriver {
     await this.init();
     const p = this.filePath(key);
     try {
-      const raw = await fs.promises.readFile(p, 'utf8');
+      const raw = await fs.promises.readFile(p, "utf8");
       const parsed = JSON.parse(raw);
       if (parsed.expiresAt && Date.now() > parsed.expiresAt) {
         try {
@@ -161,7 +162,7 @@ class FileCache implements CacheDriver {
       }
       const stored = parsed.value;
       // attempt decrypt
-      if (typeof stored === 'string') {
+      if (typeof stored === "string") {
         const dec = decryptRaw(stored);
         if (dec !== null) {
           try {
@@ -183,10 +184,10 @@ class FileCache implements CacheDriver {
     await this.init();
     const p = this.filePath(key);
     const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : null;
-    const toStore = typeof value === 'string' ? value : JSON.stringify(value);
+    const toStore = typeof value === "string" ? value : JSON.stringify(value);
     const payloadVal = encryptRaw(toStore);
     const payload = { value: payloadVal, expiresAt };
-    await fs.promises.writeFile(p, JSON.stringify(payload), 'utf8');
+    await fs.promises.writeFile(p, JSON.stringify(payload), "utf8");
   }
 
   async del(key: string) {
@@ -215,8 +216,8 @@ class FileCache implements CacheDriver {
     await this.init();
     const files = await fs.promises.readdir(this.dir);
     return files
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => decodeURIComponent(f.replace(/\.json$/, '')))
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => decodeURIComponent(f.replace(/\.json$/, "")))
       .map(stripPrefix);
   }
 }
@@ -236,15 +237,15 @@ class DBCache implements CacheDriver {
 
   async get(key: string) {
     await this.init();
-    const record: any = await (CacheModel as any).where('k', prefixed(key)).first();
+    const record: any = await (CacheModel as any).where("k", prefixed(key)).first();
     if (!record) return null;
-    const expiresAt = record.getAttribute ? record.getAttribute('expires_at') : record.expires_at;
+    const expiresAt = record.getAttribute ? record.getAttribute("expires_at") : record.expires_at;
     if (expiresAt && this.now() > Number(expiresAt)) {
       await this.del(key);
       return null;
     }
-    let rawVal = record.getAttribute ? record.getAttribute('v') : record.v;
-    if (typeof rawVal === 'string') {
+    let rawVal = record.getAttribute ? record.getAttribute("v") : record.v;
+    if (typeof rawVal === "string") {
       const dec = decryptRaw(rawVal);
       if (dec !== null) {
         try {
@@ -265,14 +266,14 @@ class DBCache implements CacheDriver {
   async set(key: string, value: any, ttlSeconds?: number | null) {
     await this.init();
     const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : null;
-    const raw = typeof value === 'string' ? value : JSON.stringify(value);
+    const raw = typeof value === "string" ? value : JSON.stringify(value);
     const stored = encryptRaw(raw);
-    let record: any = await (CacheModel as any).where('k', prefixed(key)).first();
+    let record: any = await (CacheModel as any).where("k", prefixed(key)).first();
     if (record) {
       // update existing
       if (record.setAttribute) {
-        record.setAttribute('v', stored);
-        record.setAttribute('expires_at', expiresAt);
+        record.setAttribute("v", stored);
+        record.setAttribute("expires_at", expiresAt);
         await record.save();
       } else {
         record.v = stored;
@@ -287,7 +288,7 @@ class DBCache implements CacheDriver {
 
   async del(key: string) {
     await this.init();
-    const record: any = await (CacheModel as any).where('k', prefixed(key)).first();
+    const record: any = await (CacheModel as any).where("k", prefixed(key)).first();
     if (!record) return false;
     await record.delete(true); // force physical delete (no soft deletes configured)
     return true;
@@ -311,7 +312,7 @@ class DBCache implements CacheDriver {
   async keys() {
     await this.init();
     const rows: any[] = await (CacheModel as any).query().get();
-    return rows.map((r) => (r.getAttribute ? r.getAttribute('k') : r.k)).map(stripPrefix);
+    return rows.map((r) => (r.getAttribute ? r.getAttribute("k") : r.k)).map(stripPrefix);
   }
 }
 
@@ -324,7 +325,7 @@ class RedisCache implements CacheDriver {
     let createClient: any;
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const redis = require('redis');
+      const redis = require("redis");
       createClient = redis.createClient;
     } catch (e) {
       throw new Error(
@@ -346,7 +347,7 @@ class RedisCache implements CacheDriver {
     if (password) opts.password = password;
 
     this.client = createClient(opts);
-    if (typeof this.client.connect === 'function') {
+    if (typeof this.client.connect === "function") {
       await this.client.connect();
     }
     this.initialized = true;
@@ -373,7 +374,7 @@ class RedisCache implements CacheDriver {
 
   async set(key: string, value: any, ttlSeconds?: number | null) {
     await this.init();
-    const v = typeof value === 'string' ? value : JSON.stringify(value);
+    const v = typeof value === "string" ? value : JSON.stringify(value);
     const stored = encryptRaw(v);
     if (ttlSeconds && ttlSeconds > 0) {
       await this.client.set(prefixed(key), stored, { EX: ttlSeconds });
@@ -398,8 +399,8 @@ class RedisCache implements CacheDriver {
     await this.init();
     // Use SCAN + DEL scoped to our prefix instead of FLUSHDB
     // FLUSHDB is dangerous in shared Redis environments as it wipes ALL keys
-    const pattern = CACHE_PREFIX ? `${CACHE_PREFIX}:*` : '*';
-    let cursor = '0';
+    const pattern = CACHE_PREFIX ? `${CACHE_PREFIX}:*` : "*";
+    let cursor = "0";
     do {
       const res = await this.client.scan(cursor, { MATCH: pattern, COUNT: 200 });
       cursor = res.cursor || res[0];
@@ -407,21 +408,21 @@ class RedisCache implements CacheDriver {
       if (keys.length > 0) {
         await this.client.del(keys);
       }
-    } while (cursor !== '0' && String(cursor) !== '0');
+    } while (cursor !== "0" && String(cursor) !== "0");
   }
 
   async keys() {
     await this.init();
     // Use SCAN for safety (avoid KEYS on large datasets)
-    const pattern = CACHE_PREFIX ? `${CACHE_PREFIX}:*` : '*';
+    const pattern = CACHE_PREFIX ? `${CACHE_PREFIX}:*` : "*";
     const out: string[] = [];
-    let cursor = '0';
+    let cursor = "0";
     do {
       const res = await this.client.scan(cursor, { MATCH: pattern, COUNT: 100 });
       cursor = res.cursor || res[0];
       const keys = res.keys || res[1];
       for (const k of keys) out.push(stripPrefix(k));
-    } while (cursor !== '0');
+    } while (cursor !== "0");
     return out;
   }
 }
@@ -431,9 +432,9 @@ class CacheManager implements CacheDriver {
   private initializing: Promise<void> | null = null;
 
   private createDriver(): CacheDriver {
-    const driver = (process.env.CACHE_DRIVER || 'file').toLowerCase();
-    if (driver === 'redis') return new RedisCache();
-    if (driver === 'database' || driver === 'db') return new DBCache();
+    const driver = (process.env.CACHE_DRIVER || "file").toLowerCase();
+    if (driver === "redis") return new RedisCache();
+    if (driver === "database" || driver === "db") return new DBCache();
     return new FileCache();
   }
 
@@ -490,26 +491,60 @@ export default manager;
 
 // Cache facade for convenient access
 export const Cache = {
-    get: (k: string) => manager.get(k),
-    set: (k: string, v: any, ttlSeconds?: number | null) => manager.set(k, v, ttlSeconds),
-    del: (k: string) => manager.del(k),
-    has: (k: string) => manager.has(k),
-    clear: () => manager.clear(),
-    keys: () => manager.keys(),
-    forget: (k: string) => manager.del(k),
-    flush: () => manager.clear(),
-    remember: async <T>(key: string, ttlSeconds: number | null, callback: () => Promise<T>): Promise<T> => {
-        const cached = await manager.get(key);
-        if (cached !== null) return cached as T;
-        const value = await callback();
-        await manager.set(key, value, ttlSeconds);
-        return value;
-    },
+  get: async (k: string) => {
+    const value = await manager.get(k);
+    CacheWatcher.record({ type: "get", key: k, hit: value !== null, value });
+    return value;
+  },
+  set: async (k: string, v: any, ttlSeconds?: number | null) => {
+    await manager.set(k, v, ttlSeconds);
+    CacheWatcher.record({ type: "set", key: k, value: v, ttlSeconds });
+  },
+  del: async (k: string) => {
+    const result = await manager.del(k);
+    CacheWatcher.record({ type: "del", key: k });
+    return result;
+  },
+  has: async (k: string) => {
+    const result = await manager.has(k);
+    CacheWatcher.record({ type: "has", key: k, hit: result });
+    return result;
+  },
+  clear: async () => {
+    await manager.clear();
+    CacheWatcher.record({ type: "clear", key: "" });
+  },
+  keys: () => manager.keys(),
+  forget: async (k: string) => {
+    const result = await manager.del(k);
+    CacheWatcher.record({ type: "del", key: k });
+    return result;
+  },
+  flush: async () => {
+    await manager.clear();
+    CacheWatcher.record({ type: "clear", key: "" });
+  },
+  remember: async <T>(
+    key: string,
+    ttlSeconds: number | null,
+    callback: () => Promise<T>,
+  ): Promise<T> => {
+    const cached = await manager.get(key);
+    if (cached !== null) {
+      CacheWatcher.record({ type: "get", key, hit: true, value: cached, ttlSeconds });
+      return cached as T;
+    }
+    CacheWatcher.record({ type: "get", key, hit: false, ttlSeconds });
+    const value = await callback();
+    await manager.set(key, value, ttlSeconds);
+    CacheWatcher.record({ type: "set", key, value, ttlSeconds });
+    return value;
+  },
 };
 
 // Get cache driver name
 export const getCacheDriverName = (): string => {
-    return (process.env.CACHE_DRIVER || 'file').toLowerCase();
+  return (process.env.CACHE_DRIVER || "file").toLowerCase();
 };
 
 // Get cache driver instance
@@ -534,4 +569,3 @@ export const cacheDelPrefix = async (prefix: string): Promise<number> => {
   await Promise.all(matches.map((k) => manager.del(k).catch(() => {})));
   return matches.length;
 };
-

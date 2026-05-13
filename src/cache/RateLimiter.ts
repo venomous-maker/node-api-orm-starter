@@ -18,7 +18,7 @@
  *   await limiter.hit('login:user@example.com', 60);
  */
 
-import { Cache } from './index';
+import { Cache } from "./index";
 
 export interface RateLimiterConfig {
   /** Prefix for rate limiter cache keys */
@@ -53,7 +53,7 @@ export class RateLimiter {
   private defaultDecaySeconds: number;
 
   constructor(config: RateLimiterConfig = {}) {
-    this.prefix = config.prefix ?? 'rate_limiter:';
+    this.prefix = config.prefix ?? "rate_limiter:";
     this.defaultMaxAttempts = config.maxAttempts ?? 60;
     this.defaultDecaySeconds = config.decaySeconds ?? 60;
   }
@@ -75,10 +75,14 @@ export class RateLimiter {
   /**
    * Determine if the given key has been "accessed" too many times
    */
-  async tooManyAttempts(key: string, maxAttempts?: number, _decaySeconds?: number): Promise<boolean> {
+  async tooManyAttempts(
+    key: string,
+    maxAttempts?: number,
+    _decaySeconds?: number,
+  ): Promise<boolean> {
     const max = maxAttempts ?? this.defaultMaxAttempts;
 
-    if (await this.attempts(key) >= max) {
+    if ((await this.attempts(key)) >= max) {
       if (await Cache.has(this.timerKey(key))) {
         return true;
       }
@@ -112,7 +116,9 @@ export class RateLimiter {
     } else {
       // Only update the counter with remaining TTL
       const expiresAt = await Cache.get(tKey);
-      const remainingTtl = expiresAt ? Math.max(1, expiresAt - Math.floor(Date.now() / 1000)) : decay;
+      const remainingTtl = expiresAt
+        ? Math.max(1, expiresAt - Math.floor(Date.now() / 1000))
+        : decay;
       await Cache.set(cKey, newAttempts, remainingTtl);
     }
 
@@ -124,7 +130,7 @@ export class RateLimiter {
    */
   async attempts(key: string): Promise<number> {
     const val = await Cache.get(this.cacheKey(key));
-    return typeof val === 'number' ? val : (parseInt(val, 10) || 0);
+    return typeof val === "number" ? val : parseInt(val, 10) || 0;
   }
 
   /**
@@ -182,7 +188,7 @@ export class RateLimiter {
     key: string,
     maxAttempts: number,
     callback: () => T | Promise<T>,
-    decaySeconds?: number
+    decaySeconds?: number,
   ): Promise<T> {
     const decay = decaySeconds ?? this.defaultDecaySeconds;
 
@@ -191,7 +197,7 @@ export class RateLimiter {
       throw new RateLimitExceededException(
         `Too many attempts. Please retry after ${retryAfter} seconds.`,
         retryAfter,
-        maxAttempts
+        maxAttempts,
       );
     }
 
@@ -228,7 +234,7 @@ export class RateLimiter {
     key: string,
     maxAttempts: number,
     decaySeconds: number,
-    callback: () => T | Promise<T>
+    callback: () => T | Promise<T>,
   ): Promise<T> {
     const fullKey = `${name}:${key}`;
     return this.attempt(fullKey, maxAttempts, callback, decaySeconds);
@@ -245,7 +251,7 @@ export class RateLimitExceededException extends Error {
 
   constructor(message: string, retryAfter: number, maxAttempts: number) {
     super(message);
-    this.name = 'RateLimitExceededException';
+    this.name = "RateLimitExceededException";
     this.retryAfter = retryAfter;
     this.maxAttempts = maxAttempts;
   }
@@ -259,7 +265,7 @@ const namedLimiters: Map<string, () => { maxAttempts: number; decaySeconds: numb
  */
 export function defineRateLimiter(
   name: string,
-  config: () => { maxAttempts: number; decaySeconds: number }
+  config: () => { maxAttempts: number; decaySeconds: number },
 ): void {
   namedLimiters.set(name, config);
 }
@@ -267,7 +273,9 @@ export function defineRateLimiter(
 /**
  * Get a named rate limiter configuration
  */
-export function getNamedLimiter(name: string): { maxAttempts: number; decaySeconds: number } | null {
+export function getNamedLimiter(
+  name: string,
+): { maxAttempts: number; decaySeconds: number } | null {
   const limiter = namedLimiters.get(name);
   return limiter ? limiter() : null;
 }
@@ -303,8 +311,12 @@ export const RateLimiterFacade = {
   availableAt: (key: string) => rateLimiter.availableAt(key),
 
   /** Attempt to execute callback with rate limiting */
-  attempt: <T>(key: string, maxAttempts: number, callback: () => T | Promise<T>, decaySeconds?: number) =>
-    rateLimiter.attempt(key, maxAttempts, callback, decaySeconds),
+  attempt: <T>(
+    key: string,
+    maxAttempts: number,
+    callback: () => T | Promise<T>,
+    decaySeconds?: number,
+  ) => rateLimiter.attempt(key, maxAttempts, callback, decaySeconds),
 
   /** Get rate limit info for a key */
   getInfo: (key: string, maxAttempts?: number, decaySeconds?: number) =>
@@ -317,11 +329,7 @@ export const RateLimiterFacade = {
   limiter: getNamedLimiter,
 
   /** Execute with named limiter */
-  for: async <T>(
-    name: string,
-    key: string,
-    callback: () => T | Promise<T>
-  ): Promise<T> => {
+  for: async <T>(name: string, key: string, callback: () => T | Promise<T>): Promise<T> => {
     const config = getNamedLimiter(name);
     if (!config) {
       throw new Error(`Rate limiter [${name}] is not defined.`);
@@ -331,4 +339,3 @@ export const RateLimiterFacade = {
 };
 
 export default rateLimiter;
-

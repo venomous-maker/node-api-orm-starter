@@ -1,8 +1,8 @@
-import dotenv from 'dotenv';
-import path from 'path';
+import dotenv from "dotenv";
+import path from "path";
 
 // ensure .env loaded if this module is imported directly
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 /*
 |--------------------------------------------------------------------------
@@ -16,30 +16,30 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 */
 
 export interface QueueConnectionConfig {
-    driver: 'sync' | 'database' | 'redis';
-    table?: string;        // for database driver
-    queue?: string;        // default queue name
-    retry_after?: number;  // seconds before retrying a job
-    connection?: string;   // redis connection name
+  driver: "sync" | "database" | "redis";
+  table?: string; // for database driver
+  queue?: string; // default queue name
+  retry_after?: number; // seconds before retrying a job
+  connection?: string; // redis connection name
 }
 
 export interface QueueConfig {
-    default: string;
-    connections: Record<string, QueueConnectionConfig>;
-    failed: {
-        driver: 'database';
-        table: string;
-    };
-    defaults: {
-        tries: number;
-        timeout: number;
-        backoff: number | number[];
-        maxExceptions: number;
-    };
+  default: string;
+  connections: Record<string, QueueConnectionConfig>;
+  failed: {
+    driver: "database";
+    table: string;
+  };
+  defaults: {
+    tries: number;
+    timeout: number;
+    backoff: number | number[];
+    maxExceptions: number;
+  };
 }
 
 const queueConfig: QueueConfig = {
-    /*
+  /*
     |--------------------------------------------------------------------------
     | Default Queue Connection Name
     |--------------------------------------------------------------------------
@@ -49,9 +49,9 @@ const queueConfig: QueueConfig = {
     | the queue worker.
     |
     */
-    default: process.env.QUEUE_CONNECTION || 'sync',
+  default: process.env.QUEUE_CONNECTION || "sync",
 
-    /*
+  /*
     |--------------------------------------------------------------------------
     | Queue Connections
     |--------------------------------------------------------------------------
@@ -60,27 +60,27 @@ const queueConfig: QueueConfig = {
     | used by your application.
     |
     */
-    connections: {
-        sync: {
-            driver: 'sync',
-        },
-
-        database: {
-            driver: 'database',
-            table: 'jobs',
-            queue: 'default',
-            retry_after: 90,
-        },
-
-        redis: {
-            driver: 'redis',
-            connection: process.env.REDIS_QUEUE_CONNECTION || 'default',
-            queue: process.env.REDIS_QUEUE || 'default',
-            retry_after: 90,
-        },
+  connections: {
+    sync: {
+      driver: "sync",
     },
 
-    /*
+    database: {
+      driver: "database",
+      table: "jobs",
+      queue: "default",
+      retry_after: 90,
+    },
+
+    redis: {
+      driver: "redis",
+      connection: process.env.REDIS_QUEUE_CONNECTION || "default",
+      queue: process.env.REDIS_QUEUE || "default",
+      retry_after: 90,
+    },
+  },
+
+  /*
     |--------------------------------------------------------------------------
     | Failed Queue Jobs
     |--------------------------------------------------------------------------
@@ -88,25 +88,24 @@ const queueConfig: QueueConfig = {
     | These options configure the behavior of failed queue job logging.
     |
     */
-    failed: {
-        driver: 'database',
-        table: 'failed_jobs',
-    },
+  failed: {
+    driver: "database",
+    table: "failed_jobs",
+  },
 
-    /*
+  /*
     |--------------------------------------------------------------------------
     | Job Default Settings
     |--------------------------------------------------------------------------
     */
-    defaults: {
-        tries: 3,
-        timeout: 60,
-        backoff: [1, 5, 10], // seconds between retries
-        maxExceptions: 1,
-    },
+  defaults: {
+    tries: 3,
+    timeout: 60,
+    backoff: [1, 5, 10], // seconds between retries
+    maxExceptions: 1,
+  },
 };
 
 export const QUEUE_CONNECTION = queueConfig.default;
 
 export default queueConfig;
-
