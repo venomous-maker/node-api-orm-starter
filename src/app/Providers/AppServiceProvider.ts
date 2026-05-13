@@ -1,6 +1,4 @@
 import { ServiceProvider, ServiceProviderClass } from '@/eloquent/Providers/ServiceProvider';
-import User from '@/app/Models/User/User';
-import { Model } from '@/eloquent/Model';
 import {DatabaseServiceProvider} from "@app/Providers/DatabaseServiceProvider";
 import {CacheServiceProvider} from "@app/Providers/CacheServiceProvider";
 import {RouteServiceProvider} from "@/app";
@@ -9,6 +7,11 @@ import {EventServiceProvider} from "@app/Providers/EventServiceProvider";
 import {BroadcastServiceProvider} from "@app/Providers/BroadcastServiceProvider";
 import MiddlewareServiceProvider from "@app/Providers/MiddlewareServiceProvider";
 import {DocServiceProvider} from "@app/Providers/DocServiceProvider";
+import {AuthService} from "@app/Services/AuthService";
+import {UserService} from "@app/Services/UserService";
+import {RoleService} from "@app/Services/RoleService";
+import {PermissionService} from "@app/Services/PermissionService";
+import {FileService} from "@app/Services/FileService";
 import {TelescopeServiceProvider} from "@/eloquent/Telescope";
 import {HorizonServiceProvider} from "@/eloquent/Horizon";
 
@@ -47,6 +50,13 @@ export class AppServiceProvider extends ServiceProvider {
     register(): void {
         // Register additional providers
         this.registerProviders(this.additionalProviders);
+
+        // Services
+        this.singleton(AuthService);
+        this.singleton(UserService);
+        this.singleton(RoleService);
+        this.singleton(PermissionService);
+        this.singleton(FileService);
     }
 
     /*
