@@ -75,3 +75,13 @@ export {
 
 // Documentation Commands
 export { DocsGenerateCommand, DocsListCommand } from "./DocsCommands";
+
+// Horizon Commands
+export {
+  HorizonWorkCommand,
+  HorizonPauseCommand,
+  HorizonContinueCommand,
+  HorizonTerminateCommand,
+  HorizonStatusCommand,
+  HorizonListCommand,
+} from "@/eloquent/Horizon/Commands/HorizonCommands";

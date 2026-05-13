@@ -32,9 +32,12 @@ export class Worker extends EventEmitter {
 
   private connectionName: string;
   private queues: string[];
-  private options: Required<WorkerOptions>;
+  private options: Required<Omit<WorkerOptions, "workerId">>;
+  /** Horizon worker ID — enables Cache-based control signals from the dashboard. */
+  private readonly workerId?: string;
 
   private readonly restartKey: string;
+  private readonly horizonCtrlPrefix: string;
 
   constructor(
     connectionName?: string,
@@ -46,6 +49,8 @@ export class Worker extends EventEmitter {
     this.connectionName = connectionName || queueConfig.default;
     this.queues = Array.isArray(queues) ? queues : [queues];
     this.restartKey = `${process.env.APP_NAME || "app"}:queue:restart`;
+    this.horizonCtrlPrefix = `${process.env.APP_NAME || "app"}:horizon:ctrl`;
+    this.workerId = options.workerId;
 
     this.options = {
       connection: this.connectionName,
@@ -116,11 +121,27 @@ export class Worker extends EventEmitter {
           break;
         }
 
-        // Batch both cache lookups in parallel instead of sequential awaits
-        const [inMaintenance, restart] = await Promise.all([
+        // Batch all cache lookups in parallel
+        const [inMaintenance, restart, horizonSignal] = await Promise.all([
           this.options.force ? Promise.resolve(false) : this.isInMaintenanceMode(),
           this.shouldRestart(),
+          this.checkHorizonSignal(),
         ]);
+
+        // Apply Horizon dashboard control signal if present
+        if (horizonSignal === "stop") {
+          console.log("[Worker] Horizon stop signal received, stopping...");
+          this.stop();
+          break;
+        }
+        if (horizonSignal === "pause" && !this.paused) {
+          console.log("[Worker] Horizon pause signal received.");
+          this.pause();
+        }
+        if (horizonSignal === "resume" && this.paused) {
+          console.log("[Worker] Horizon resume signal received.");
+          this.resume();
+        }
 
         if (restart) {
           console.log("[Worker] Restart signal detected, stopping...");
@@ -352,6 +373,19 @@ export class Worker extends EventEmitter {
       return restartTs != null && Number(restartTs) > this.startTime;
     } catch {
       return false;
+    }
+  }
+
+  /** Read and immediately clear a Horizon dashboard control signal for this worker. */
+  private async checkHorizonSignal(): Promise<"pause" | "resume" | "stop" | null> {
+    if (!this.workerId) return null;
+    const key = `${this.horizonCtrlPrefix}:${this.workerId}`;
+    try {
+      const sig = await Cache.get(key);
+      if (sig) await Cache.del(key);
+      return (sig as "pause" | "resume" | "stop" | null) ?? null;
+    } catch {
+      return null;
     }
   }
 

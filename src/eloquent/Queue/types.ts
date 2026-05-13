@@ -101,6 +101,8 @@ export interface WorkerOptions {
   stopWhenEmpty?: boolean;
   rest?: number;
   verbose?: boolean;
+  /** Horizon worker ID — enables Cache-based pause/resume/stop signals from the dashboard. */
+  workerId?: string;
 }
 
 export interface JobEvent {

@@ -12,6 +12,7 @@ import { PoolConnection, Pool } from "mysql2/promise";
 import { getPool, getDbType, query as dbQuery, getMongoDb } from "@/config/db.config";
 import { ClientSession, Db, Collection as MongoCollection, Document } from "mongodb";
 
+
 // ============================================================================
 // TRANSACTION INTERFACES
 // ============================================================================
@@ -239,19 +240,44 @@ export class DB {
   // ==========================================================================
 
   /**
-   * Execute a query using the current transaction if one exists, otherwise use the pool
-   * This is the main method that Models should use for all database operations
+   * Execute a query using the current transaction if one exists, otherwise use the pool.
+   * Emits a `db:query` event via the application EventDispatcher so Telescope and
+   * other listeners can observe all database activity without modifying call sites.
    */
   static async executeQuery<T = any>(sql: string, params: any[] = []): Promise<T[]> {
     if (getDbType() === "mongodb") {
       throw new Error("executeQuery() is not supported for MongoDB");
     }
 
-    if (this.currentMysqlTransaction) {
-      return this.currentMysqlTransaction.query<T>(sql, params);
+    const start = process.hrtime.bigint();
+    let rows: T[];
+    let queryError: Error | undefined;
+
+    try {
+      if (this.currentMysqlTransaction) {
+        rows = await this.currentMysqlTransaction.query<T>(sql, params);
+      } else {
+        rows = await dbQuery<T>(sql, params);
+      }
+    } catch (err) {
+      queryError = err as Error;
+      throw err;
+    } finally {
+      try {
+        const durationMs = Number((process.hrtime.bigint() - start) / 1_000_000n);
+        const { emitQueryEvent } = require("@/eloquent/Core/QueryInstrumentation");
+        emitQueryEvent({
+          sql,
+          bindings: params,
+          duration: durationMs,
+          rows: rows! ? rows!.length : 0,
+          error: queryError?.message,
+          connection: process.env.DB_CONNECTION || "mysql",
+        });
+      } catch { /* never break the query path */ }
     }
 
-    return dbQuery<T>(sql, params);
+    return rows!;
   }
 
   /**
@@ -428,14 +454,27 @@ export class DB {
   }
 
   /**
-   * Get a MongoDB collection (MongoDB only)
+   * Get a MongoDB collection (MongoDB only).
+   * The returned collection is transparently proxied so every operation
+   * (find, insertOne, updateMany, aggregate, …) emits a `db:query` event
+   * that Telescope's QueryWatcher captures.
    */
   static collection<T extends Document = Document>(name: string): MongoCollection<T> {
     if (getDbType() !== "mongodb") {
       throw new Error("DB.collection() is only supported for MongoDB. Use DB.table() instead.");
     }
     const db = getMongoDb();
-    return db.collection<T>(name);
+    return DB.instrumentMongoCollection<T>(name, db.collection<T>(name));
+  }
+
+  /**
+  /** Delegates to the shared QueryInstrumentation proxy (same logic as db.config.ts:collection). */
+  private static instrumentMongoCollection<T extends Document>(
+    collectionName: string,
+    col: MongoCollection<T>,
+  ): MongoCollection<T> {
+    const { createMongoQueryProxy } = require("@/eloquent/Core/QueryInstrumentation");
+    return createMongoQueryProxy(collectionName, col);
   }
 
   /**

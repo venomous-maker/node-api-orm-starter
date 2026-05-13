@@ -1976,19 +1976,19 @@ export abstract class Model {
     // Fire saving event
     const savingResult = await staticClass.fireModelEvent("saving", this, true);
     if (savingResult === false) {
-      return this;
+      return ((this as any).__proxy ?? this) as this;
     }
 
     // Fire creating/updating events
     if (!this.__exists) {
       const creatingResult = await staticClass.fireModelEvent("creating", this, true);
       if (creatingResult === false) {
-        return this;
+        return ((this as any).__proxy ?? this) as this;
       }
     } else {
       const updatingResult = await staticClass.fireModelEvent("updating", this, true);
       if (updatingResult === false) {
-        return this;
+        return ((this as any).__proxy ?? this) as this;
       }
     }
 
@@ -2090,7 +2090,7 @@ export abstract class Model {
       // Fire saved event
       await staticClass.fireModelEvent("saved", this);
 
-      return this;
+      return ((this as any).__proxy ?? this) as this;
     }
 
     // SQL implementation with events
@@ -2150,7 +2150,7 @@ export abstract class Model {
     // Fire saved event
     await staticClass.fireModelEvent("saved", this);
 
-    return this;
+    return ((this as any).__proxy ?? this) as this;
   }
 
   // Update delete method to include events

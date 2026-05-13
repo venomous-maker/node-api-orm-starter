@@ -9,6 +9,8 @@ import {EventServiceProvider} from "@app/Providers/EventServiceProvider";
 import {BroadcastServiceProvider} from "@app/Providers/BroadcastServiceProvider";
 import MiddlewareServiceProvider from "@app/Providers/MiddlewareServiceProvider";
 import {DocServiceProvider} from "@app/Providers/DocServiceProvider";
+import {TelescopeServiceProvider} from "@/eloquent/Telescope";
+import {HorizonServiceProvider} from "@/eloquent/Horizon";
 
 export class AppServiceProvider extends ServiceProvider {
     /*
@@ -24,11 +26,15 @@ export class AppServiceProvider extends ServiceProvider {
         DatabaseServiceProvider,
         CacheServiceProvider,
         MiddlewareServiceProvider,
+        // Telescope must come before RouteServiceProvider so its register() method
+        // can add the requestWatcher middleware before any routes are mounted.
+        TelescopeServiceProvider,
         RouteServiceProvider,
         QueueServiceProvider,
         EventServiceProvider,
         BroadcastServiceProvider,
         DocServiceProvider,
+        HorizonServiceProvider,
         // Example: BillingServiceProvider,
         // Example: NotificationServiceProvider,
     ];

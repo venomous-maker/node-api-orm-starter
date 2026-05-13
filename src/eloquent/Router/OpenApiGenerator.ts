@@ -411,6 +411,44 @@ function validationRuleToSchema(ruleString: string): {
 // ─── Generator ─────────────────────────────────────────────────────────────────
 
 export class OpenApiGenerator {
+  /*
+  |--------------------------------------------------------------------------
+  | Extension registry
+  |--------------------------------------------------------------------------
+  |
+  | Service providers (Horizon, Telescope, etc.) can contribute extra paths
+  | and tags that are merged into the final spec without touching the router.
+  |
+  */
+
+  private static _extraPaths: Record<string, Record<string, any>> = {};
+  private static _extraTags: Array<{ name: string; description?: string }> = [];
+
+  /**
+   * Register additional OpenAPI paths from outside the router (e.g. Horizon, Telescope).
+   * Paths are merged into the generated spec. Existing paths are NOT overwritten.
+   */
+  static registerPaths(
+    paths: Record<string, Record<string, any>>,
+    tags: Array<{ name: string; description?: string }> = [],
+  ): void {
+    for (const [p, ops] of Object.entries(paths)) {
+      if (!this._extraPaths[p]) this._extraPaths[p] = {};
+      Object.assign(this._extraPaths[p], ops);
+    }
+    for (const tag of tags) {
+      if (!this._extraTags.find((t) => t.name === tag.name)) {
+        this._extraTags.push(tag);
+      }
+    }
+  }
+
+  /** Clear registered extensions (useful in tests). */
+  static clearExtensions(): void {
+    this._extraPaths = {};
+    this._extraTags = [];
+  }
+
   /**
    * Generate an OpenAPI 3.0 document from scanned routes.
    */
@@ -555,10 +593,19 @@ export class OpenApiGenerator {
       doc.paths[openApiPath][method] = operation;
     }
 
-    // Build tags array
-    doc.tags = Array.from(tagSet)
-      .sort()
-      .map((name) => ({ name }));
+    // Merge extension paths contributed by Horizon, Telescope, etc.
+    for (const [p, ops] of Object.entries(OpenApiGenerator._extraPaths)) {
+      if (!doc.paths[p]) doc.paths[p] = {};
+      Object.assign(doc.paths[p], ops);
+    }
+
+    // Build tags array (route tags + extension tags)
+    doc.tags = [
+      ...Array.from(tagSet)
+        .sort()
+        .map((name) => ({ name })),
+      ...OpenApiGenerator._extraTags,
+    ];
 
     return doc;
   }
