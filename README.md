@@ -5,7 +5,7 @@
 
 The project has permanently moved to:
 
-## 👉 :contentReference[oaicite:0]{index=0}
+## 👉 ## 👉 https://github.com/VEN-LANG/vest
 
 Please use the new repository for:
 - Active development
