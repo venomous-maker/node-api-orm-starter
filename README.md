@@ -5,7 +5,7 @@
 
 The project has permanently moved to:
 
-## 👉 ## 👉 https://github.com/VEN-LANG/vest
+## 👉 https://github.com/VEN-LANG/vest
 
 Please use the new repository for:
 - Active development
